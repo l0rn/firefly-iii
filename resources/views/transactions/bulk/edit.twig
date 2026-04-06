@@ -159,6 +159,36 @@
                                             </div>
                                         </td>
                                     </tr>
+                                    <tr>
+                                        <th class="quarter">{{ trans('list.source_account') }}</th>
+                                        <td>
+                                            <input class="form-control" placeholder="" name="source_name" id="source_name" autocomplete="off" type="text" value="" spellcheck="false">
+                                            <input type="hidden" name="source_id" id="source_id" value="">
+                                        </td>
+                                        <td>
+                                            <div class="checkbox">
+                                                <label>
+                                                    <input name="ignore_source" id="ignore_source" type="checkbox" value="1" checked>
+                                                    {{ 'no_bulk_source'|_ }}
+                                                </label>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th class="quarter">{{ trans('list.destination_account') }}</th>
+                                        <td>
+                                            <input class="form-control" placeholder="" name="destination_name" id="destination_name" autocomplete="off" type="text" value="" spellcheck="false">
+                                            <input type="hidden" name="destination_id" id="destination_id" value="">
+                                        </td>
+                                        <td>
+                                            <div class="checkbox">
+                                                <label>
+                                                    <input name="ignore_destination" id="ignore_destination" type="checkbox" value="1" checked>
+                                                    {{ 'no_bulk_destination'|_ }}
+                                                </label>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 </table>
 
                             </div>
