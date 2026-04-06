@@ -25,6 +25,52 @@ $(document).ready(function () {
     initTagsAC();
     initCategoryAC();
 
+    // Source account autocomplete (all account types, for mixed transaction types)
+    var sourceAccounts = new Bloodhound({
+        datumTokenizer: Bloodhound.tokenizers.obj.whitespace('name'),
+        queryTokenizer: Bloodhound.tokenizers.whitespace,
+        remote: {
+            url: 'api/v1/autocomplete/accounts?query=%QUERY&uid=' + uid,
+            wildcard: '%QUERY',
+            filter: function (list) {
+                return $.map(list, function (item) {
+                    return {name: item.name, id: item.id};
+                });
+            }
+        }
+    });
+    sourceAccounts.initialize();
+    $('input[name="source_name"]').typeahead({hint: true, highlight: true}, {
+        source: sourceAccounts,
+        displayKey: 'name',
+        autoSelect: false
+    }).on('typeahead:selected typeahead:autocompleted', function (e, datum) {
+        $('input[name="source_id"]').val(datum.id);
+    });
+
+    // Destination account autocomplete (all account types, for mixed transaction types)
+    var destinationAccounts = new Bloodhound({
+        datumTokenizer: Bloodhound.tokenizers.obj.whitespace('name'),
+        queryTokenizer: Bloodhound.tokenizers.whitespace,
+        remote: {
+            url: 'api/v1/autocomplete/accounts?query=%QUERY&uid=' + uid,
+            wildcard: '%QUERY',
+            filter: function (list) {
+                return $.map(list, function (item) {
+                    return {name: item.name, id: item.id};
+                });
+            }
+        }
+    });
+    destinationAccounts.initialize();
+    $('input[name="destination_name"]').typeahead({hint: true, highlight: true}, {
+        source: destinationAccounts,
+        displayKey: 'name',
+        autoSelect: false
+    }).on('typeahead:selected typeahead:autocompleted', function (e, datum) {
+        $('input[name="destination_id"]').val(datum.id);
+    });
+
     // on change, remove the checkbox.
     $('input[name="category"]').change(function () {
         $('input[name="ignore_category"]').attr('checked', false);
@@ -41,6 +87,14 @@ $(document).ready(function () {
             $('#tags_action_do_replace').attr('checked', true);
         }
 
+    });
+
+    $('input[name="source_name"]').on('input', function () {
+        $('input[name="ignore_source"]').prop('checked', false);
+    });
+
+    $('input[name="destination_name"]').on('input', function () {
+        $('input[name="ignore_destination"]').prop('checked', false);
     });
 
 

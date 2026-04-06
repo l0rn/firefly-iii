@@ -24,6 +24,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Transaction;
 
+use FireflyIII\Enums\AccountTypeEnum;
+use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Events\Model\TransactionGroup\TransactionGroupEventFlags;
 use FireflyIII\Events\Model\TransactionGroup\TransactionGroupEventObjects;
 use FireflyIII\Events\Model\TransactionGroup\UpdatedSingleTransactionGroup;
@@ -31,8 +33,10 @@ use FireflyIII\Events\Model\Webhook\WebhookMessagesRequestSending;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\BulkEditJournalRequest;
 use FireflyIII\Models\TransactionJournal;
+use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Budget\BudgetRepositoryInterface;
 use FireflyIII\Repositories\Journal\JournalRepositoryInterface;
+use FireflyIII\Services\Internal\Update\JournalUpdateService;
 use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
@@ -80,10 +84,27 @@ final class BulkController extends Controller
 
         // get list of budgets:
         /** @var BudgetRepositoryInterface $budgetRepos */
-        $budgetRepos = app(BudgetRepositoryInterface::class);
-        $budgetList  = app('expandedform')->makeSelectListWithEmpty($budgetRepos->getActiveBudgets());
+        $budgetRepos         = app(BudgetRepositoryInterface::class);
+        $budgetList          = app('expandedform')->makeSelectListWithEmpty($budgetRepos->getActiveBudgets());
 
-        return view('transactions.bulk.edit', ['journals' => $journals, 'subTitle' => $subTitle, 'budgetList' => $budgetList]);
+        /** @var AccountRepositoryInterface $accountRepository */
+        $accountRepository   = app(AccountRepositoryInterface::class);
+
+        // valid withdrawal sources:
+        $array               = array_keys(config(sprintf('firefly.source_dests.%s', TransactionTypeEnum::WITHDRAWAL->value)));
+        $withdrawalSources   = $accountRepository->getAccountsByType($array);
+
+        // valid deposit destinations:
+        $array               = config(sprintf('firefly.source_dests.%s.%s', TransactionTypeEnum::DEPOSIT->value, AccountTypeEnum::REVENUE->value));
+        $depositDestinations = $accountRepository->getAccountsByType($array);
+
+        return view('transactions.bulk.edit', [
+            'journals'            => $journals,
+            'subTitle'            => $subTitle,
+            'budgetList'          => $budgetList,
+            'withdrawalSources'   => $withdrawalSources,
+            'depositDestinations' => $depositDestinations,
+        ]);
     }
 
     /**
@@ -91,13 +112,15 @@ final class BulkController extends Controller
      */
     public function update(BulkEditJournalRequest $request): RedirectResponse
     {
-        $journalIds     = $request->get('journals');
-        $journalIds     = is_array($journalIds) ? $journalIds : [];
-        $ignoreCategory = 1 === (int) $request->get('ignore_category');
-        $ignoreBudget   = 1 === (int) $request->get('ignore_budget');
-        $tagsAction     = $request->get('tags_action');
-        $collection     = new Collection();
-        $count          = 0;
+        $journalIds        = $request->get('journals');
+        $journalIds        = is_array($journalIds) ? $journalIds : [];
+        $ignoreCategory    = 1 === (int) $request->get('ignore_category');
+        $ignoreBudget      = 1 === (int) $request->get('ignore_budget');
+        $ignoreSource      = 1 === (int) $request->get('ignore_source');
+        $ignoreDestination = 1 === (int) $request->get('ignore_destination');
+        $tagsAction        = $request->get('tags_action');
+        $collection        = new Collection();
+        $count             = 0;
 
         foreach ($journalIds as $journalId) {
             $journalId = (int) $journalId;
@@ -106,7 +129,9 @@ final class BulkController extends Controller
                 $resultA = $this->updateJournalBudget($journal, $ignoreBudget, $request->integer('budget_id'));
                 $resultB = $this->updateJournalTags($journal, $tagsAction, explode(',', $request->convertString('tags')));
                 $resultC = $this->updateJournalCategory($journal, $ignoreCategory, $request->convertString('category'));
-                if ($resultA || $resultB || $resultC) {
+                $resultD = $this->updateJournalSource($journal, $ignoreSource, $request->integer('source_id'), $request->convertString('source_name'));
+                $resultE = $this->updateJournalDestination($journal, $ignoreDestination, $request->integer('destination_id'), $request->convertString('destination_name'));
+                if ($resultA || $resultB || $resultC || $resultD || $resultE) {
                     ++$count;
                     $collection->push($journal);
                 }
@@ -164,6 +189,42 @@ final class BulkController extends Controller
             $new      = array_unique(array_merge($tags, $existing));
             $this->repository->updateTags($journal, $new);
         }
+
+        return true;
+    }
+
+    private function updateJournalSource(TransactionJournal $journal, bool $ignoreUpdate, int $sourceId, string $sourceName): bool
+    {
+        if ($ignoreUpdate) {
+            return false;
+        }
+        Log::debug(sprintf('Set source to id=%d, name="%s"', $sourceId, $sourceName));
+        $service = app(JournalUpdateService::class);
+        $service->setTransactionJournal($journal);
+        $data    = [
+            'source_id'   => 0 !== $sourceId ? $sourceId : null,
+            'source_name' => '' !== $sourceName ? $sourceName : null,
+        ];
+        $service->setData($data);
+        $service->update();
+
+        return true;
+    }
+
+    private function updateJournalDestination(TransactionJournal $journal, bool $ignoreUpdate, int $destinationId, string $destinationName): bool
+    {
+        if ($ignoreUpdate) {
+            return false;
+        }
+        Log::debug(sprintf('Set destination to id=%d, name="%s"', $destinationId, $destinationName));
+        $service = app(JournalUpdateService::class);
+        $service->setTransactionJournal($journal);
+        $data    = [
+            'destination_id'   => 0 !== $destinationId ? $destinationId : null,
+            'destination_name' => '' !== $destinationName ? $destinationName : null,
+        ];
+        $service->setData($data);
+        $service->update();
 
         return true;
     }
